@@ -16,8 +16,10 @@ make
 ```
 ## Flashing
 
-```sh
 with st-flash
+
+```sh
+make st-flash
 ```
 
 ### VS code settings: helpfull guy
