@@ -38,7 +38,7 @@
 typedef uint8_t ScratchPad[9];
 
 // parasite power on or off
-bool parasite;
+bool parasite = false;
 
 // used to determine the delay amount needed to allow for the
 // temperature conversion to take place

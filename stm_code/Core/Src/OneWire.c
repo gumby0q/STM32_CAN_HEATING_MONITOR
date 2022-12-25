@@ -12,6 +12,7 @@
 #define OW_R_1	0xff
 
 uint8_t ow_buf[8];
+uint8_t ow_buf_rx[16];
 
 //#define TIMEOUT_MS (250)
 #define OW_RESET_TIMEOUT_VALUE (0x00000100U)
@@ -22,6 +23,40 @@ uint8_t ow_buf[8];
 static void OW_toBits(uint8_t ow_byte, uint8_t *ow_bits);
 static uint8_t OW_toByte(uint8_t *ow_bits);
 static uint8_t OW_UART_Init(uint32_t baudRate);
+
+
+HAL_StatusTypeDef HAL_SnglWireFullDuplex_EnableRTX(UART_HandleTypeDef *huart)
+{
+  __HAL_LOCK(huart);
+  huart->gState = HAL_UART_STATE_BUSY;
+
+  /* Enable the USART's transmit and receive interface by setting the TE bit in the USART CR1 register */
+  SET_BIT(huart->Instance->CR1, (USART_CR1_TE | USART_CR1_RE));
+
+  huart->gState = HAL_UART_STATE_READY;
+
+  __HAL_UNLOCK(huart);
+
+  return HAL_OK;
+}
+
+
+HAL_StatusTypeDef HAL_SnglWireFullDuplex_DisableRTX(UART_HandleTypeDef *huart)
+{
+  __HAL_LOCK(huart);
+  huart->gState = HAL_UART_STATE_BUSY;
+
+  /* Disable both Receive and transmit by Clearing TE and RE bits */
+  CLEAR_BIT(huart->Instance->CR1, (USART_CR1_TE | USART_CR1_RE));
+
+  huart->gState = HAL_UART_STATE_READY;
+
+  __HAL_UNLOCK(huart);
+
+  return HAL_OK;
+}
+
+
 
 /*----------------------------------------------------------*/
 static void OW_toBits(uint8_t ow_byte, uint8_t *ow_bits)
@@ -63,12 +98,16 @@ static uint8_t OW_toByte(uint8_t *ow_bits)
 static uint8_t OW_SendBits(uint8_t num_bits)
 {
 
-		HAL_HalfDuplex_EnableTransmitter(&HUARTx);
-	HAL_UART_Transmit(&HUARTx, ow_buf, num_bits, HAL_MAX_DELAY);
+		// HAL_HalfDuplex_EnableTransmitter(&HUARTx);
 	// HAL_UART_Transmit_DMA(&HUARTx, ow_buf, num_bits);
-		HAL_HalfDuplex_EnableReceiver(&HUARTx);
-	HAL_UART_Receive(&HUARTx, ow_buf, num_bits, HAL_MAX_DELAY);
-	// HAL_UART_Receive_DMA(&HUARTx, ow_buf, num_bits);
+		// HAL_HalfDuplex_EnableReceiver(&HUARTx);
+	// HAL_UART_Receive_IT(&HUARTx, ow_buf, num_bits, HAL_MAX_DELAY);
+	// HAL_UART_Transmit_IT(&HUARTx, ow_buf, num_bits, HAL_MAX_DELAY);
+	// HAL_UART_Receive_IT(&HUARTx, ow_buf_rx, num_bits);
+	// HAL_UART_Transmit_IT(&HUARTx, ow_buf, num_bits);
+
+	HAL_UART_Receive_DMA(&HUARTx, ow_buf, num_bits);
+	HAL_UART_Transmit_DMA(&HUARTx, ow_buf, num_bits);
 
 //	while (HAL_UART_GetState(&HUARTx) != HAL_UART_STATE_READY)
 //	{
@@ -85,6 +124,8 @@ static uint8_t OW_SendBits(uint8_t num_bits)
 				return OW_TIMEOUT;
 			}
 		}
+
+		// memcpy(ow_buf, ow_buf_rx, num_bits);
 
 		return 0;
 }
@@ -106,18 +147,23 @@ static uint8_t OW_UART_Init(uint32_t baudRate)
 uint8_t OW_Reset(void)
 {
 	uint8_t ow_presence = 0xf0;
+	uint8_t _ow_presence = 0;
 
 	OW_UART_Init(9600);
 
 
-		HAL_HalfDuplex_EnableTransmitter(&HUARTx);
+		// HAL_HalfDuplex_EnableTransmitter(&HUARTx);
 	// HAL_UART_Transmit_DMA(&HUARTx, &ow_presence, 1);
-	HAL_UART_Transmit(&HUARTx, &ow_presence, 1, HAL_MAX_DELAY);
 
-		HAL_HalfDuplex_EnableReceiver(&HUARTx);
+		// HAL_HalfDuplex_EnableReceiver(&HUARTx);
 	// HAL_UART_Receive_DMA(&HUARTx, &ow_presence, 1);
-	HAL_UART_Receive(&HUARTx, &ow_presence, 1, HAL_MAX_DELAY);
+	// HAL_UART_Receive_IT(&HUARTx, &ow_presence, 1, HAL_MAX_DELAY);
+	// HAL_UART_Transmit_IT(&HUARTx, &ow_presence, 1, HAL_MAX_DELAY);
+	// HAL_UART_Receive_IT(&HUARTx, &_ow_presence, 1);
+	// HAL_UART_Transmit_IT(&HUARTx, &ow_presence, 1);
 
+	HAL_UART_Receive_DMA(&HUARTx, &ow_presence, 1);
+	HAL_UART_Transmit_DMA(&HUARTx, &ow_presence, 1);
 
 
 	uint32_t tickstart = 0U;
@@ -131,6 +177,8 @@ uint8_t OW_Reset(void)
 		}
 	}
 
+	// ow_presence = _ow_presence;
+
 	OW_UART_Init(115200);
 
 	if (ow_presence != 0xf0)
@@ -143,6 +191,9 @@ uint8_t OW_Reset(void)
 
 uint8_t OW_Init(void)
 {
+
+	// HAL_SnglWireFullDuplex_EnableRTX(&HUARTx);
+
 	return OW_UART_Init(9600);
 }
 
@@ -154,12 +205,12 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 		error = OW_Reset();
 		if (error != 0)
 		{
-			printf("-0-test\n");
+			// printf("-0-test\n");
 			return error;
 		}
 	}
 
-	printf("-1-test\n");
+	// printf("-1-test\n");
 
 	while (cLen > 0)
 	{
@@ -169,17 +220,34 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 
 		char buff[30];
 
-		printf("-2-test\n");
-		HAL_HalfDuplex_EnableTransmitter(&HUARTx);
+		// printf("-2-test\n");
+		// HAL_HalfDuplex_EnableTransmitter(&HUARTx);
 		// error = HAL_UART_Transmit_DMA(&HUARTx, ow_buf, sizeof(ow_buf));
-		error = HAL_UART_Transmit(&HUARTx, ow_buf, sizeof(ow_buf), HAL_MAX_DELAY);
-		sprintf(buff, "-3-test error=%d \n", error);
-		printf(buff);
-		HAL_HalfDuplex_EnableReceiver(&HUARTx);
+		// error = HAL_UART_Receive_IT(&HUARTx, ow_buf, sizeof(ow_buf), HAL_MAX_DELAY);
+		// error = HAL_UART_Receive_IT(&HUARTx, ow_buf_rx, sizeof(ow_buf));
+		// sprintf(buff, "-3-test error=%d \n", error);
+		// printf(buff);
+		// HAL_HalfDuplex_EnableReceiver(&HUARTx);
 		// error = HAL_UART_Receive_DMA(&HUARTx, ow_buf, sizeof(ow_buf));
-		error = HAL_UART_Receive(&HUARTx, ow_buf, sizeof(ow_buf), HAL_MAX_DELAY);
-		sprintf(buff, "-4-test error=%d \n", error);
-		printf(buff);
+		// error = HAL_UART_Transmit_IT(&HUARTx, ow_buf, sizeof(ow_buf), HAL_MAX_DELAY);
+		// sprintf(buff, "-4-test error=%d \n", error);
+		// printf(buff);
+
+		// error = HAL_UART_Receive_IT(&HUARTx, ow_buf_rx, 8);
+		// error = HAL_UART_Transmit_IT(&HUARTx, ow_buf, sizeof(ow_buf));
+
+		error = HAL_UART_Receive_DMA(&HUARTx, ow_buf, sizeof(ow_buf));
+		error = HAL_UART_Transmit_DMA(&HUARTx, ow_buf, sizeof(ow_buf));
+
+		// char buf[30];
+		// uint8_t tmp_byte = 0;
+		// uint8_t tmp_byte2 = 0;
+		// uint8_t tmp_byte3 = 0;
+		// tmp_byte = OW_toByte(ow_buf);
+		// tmp_byte2 = OW_toByte(ow_buf_rx);
+		// tmp_byte3 = OW_toByte(&ow_buf_rx[8]);
+		// sprintf(buf, "%d - %d - %d \r\n", tmp_byte, tmp_byte2, tmp_byte3);
+		// printf(buf);
 
 		uint32_t tickstart = 0U;
 		tickstart = HAL_GetTick();
@@ -191,7 +259,9 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 			}
 		}
 
-		printf("-5-test\n");
+		// memcpy(ow_buf, ow_buf_rx, sizeof(ow_buf));
+
+		// printf("-5-test\n");
 
 		if (readStart == 0 && dLen > 0)
 		{
@@ -228,8 +298,8 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 
 	lastCollision = 0;
 
-	sprintf(_test_str, "check 0 _test_found=%d num=%d\n", _test_found, num);
-	printf(_test_str);
+	// sprintf(_test_str, "check 0 _test_found=%d num=%d\n", _test_found, num);
+	// printf(_test_str);
 
 	while (_test_found < num)
 	{
@@ -238,8 +308,8 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 
 		error_status = OW_Send(OW_SEND_RESET, (uint8_t*)"\xf0", 1, NULL, 0, OW_NO_READ);
 
-		sprintf(_test_str, "check 1 error_status=%d num=%d\n", error_status, num);
-		printf(_test_str);
+		// sprintf(_test_str, "check 1 error_status=%d num=%d\n", error_status, num);
+		// printf(_test_str);
 
 		if (error_status != 0) {
 			return error_status;
@@ -328,8 +398,8 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 		}
 
 		_test_found = _test_found + 1;
-		sprintf(_test_str, "_test_found %d \n", _test_found);
-		printf(_test_str);
+		// sprintf(_test_str, "_test_found %d \n", _test_found);
+		// printf(_test_str);
 		// *found = *found + 1;
 		*found = _test_found;
 
