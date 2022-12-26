@@ -106,9 +106,10 @@ uint8_t DT_Begin(void)
 		if (DT_ValidAddress(&deviceAddress[i * 8]))
 		{
 
-			if (!parasite && DT_ReadPowerSupply(&deviceAddress[i * 8]))
+			if (!parasite && DT_ReadPowerSupply(&deviceAddress[i * 8])) {
 				parasite = true;
-
+			}
+			
 			bitResolution = max(bitResolution, DT_GetResolution(&deviceAddress[i * 8]));
 
 			if (DT_ValidFamily(&deviceAddress[i * 8]))
