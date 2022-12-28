@@ -267,14 +267,14 @@ int main(void)
 
   printf("Debug UART is OK!\r\n");
 
-  if (OW_Reset() == OW_OK)
-  {
-    printf("OneWire devices are present :)\r\n");
-  }
-  else
-  {
-    printf("OneWire no devices :(\r\n");
-  }
+  // if (OW_Reset() == OW_OK)
+  // {
+  //   printf("OneWire devices are present :)\r\n");
+  // }
+  // else
+  // {
+  //   printf("OneWire no devices :(\r\n");
+  // }
 
   // arrays to hold device address
   CurrentDeviceAddress insideThermometer;

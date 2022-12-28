@@ -93,9 +93,9 @@ uint8_t DT_Begin(void)
 //	devices = OW_Search(deviceAddress, ONEWIRE_MAX_DEVICES);
 	error_status = OW_Search(deviceAddress, ONEWIRE_MAX_DEVICES, &devices);
 
-	char buf[18];
-	sprintf(buf, "\r\n r %d\r\n", error_status);
-	printf(buf);
+	// char buf[18];
+	// sprintf(buf, "\r\n r %d\r\n", error_status);
+	// printf(buf);
 
 	if (error_status != 0) {
 		return error_status;
@@ -156,9 +156,9 @@ bool DT_GetAddress(uint8_t* currentDeviceAddress, uint8_t index)
 //	depth = OW_Search(deviceAddress, ONEWIRE_MAX_DEVICES);
 	error_status = OW_Search(deviceAddress, ONEWIRE_MAX_DEVICES, &depth);
 
-	char buf[18];
-	sprintf(buf, "\r\n r2 %d %d\r\n", error_status, depth);
-	printf(buf);
+	// char buf[18];
+	// sprintf(buf, "\r\n r2 %d %d\r\n", error_status, depth);
+	// printf(buf);
 	if (error_status != 0) {
 		return error_status;
 	}
@@ -249,11 +249,17 @@ void DT_WriteScratchPad(const uint8_t* deviceAddress, const uint8_t* scratchPad)
 bool DT_ReadPowerSupply(const uint8_t* deviceAddress)
 {
 	uint8_t ret = 0;
+	uint8_t err = 0;
 
 	uint8_t query[11]={0x55, 0, 0, 0, 0, 0, 0, 0, 0, READPOWERSUPPLY, 0xFF};
 	memcpy(&query[1], deviceAddress, 8);
-	OW_Send(OW_SEND_RESET, query, 10, &ret, 1, 10);
+	err = OW_Send(OW_SEND_RESET, query, 10, &ret, 1, 10);
 	OW_Reset();
+
+	char buf[50];
+	sprintf(buf, "--- err DT_ReadPowerSupply OW_Send %d\r\n", err);
+	printf(buf);
+
 
 	if (ret == 0)
 	{
