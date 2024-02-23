@@ -18,6 +18,7 @@
 // Error Codes
 #define DS_OK					0
 #define DS_NO_DS18_DEVICES 		1
+#define DS_TEMP_READ_ERROR 		2
 
 #define DEVICE_DISCONNECTED_C 	-127
 #define DEVICE_DISCONNECTED_F 	-196.6
@@ -107,7 +108,7 @@ float DT_GetTempC(const uint8_t*);
 float DT_GetTempF(const uint8_t*);
 
 // Get temperature for device index (slow)
-float DT_GetTempCByIndex(uint8_t);
+int8_t DT_GetTempCByIndex(uint8_t deviceIndex, float * temperature);
 
 // Get temperature for device index (slow)
 float DT_GetTempFByIndex(uint8_t);
