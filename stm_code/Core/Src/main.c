@@ -176,7 +176,17 @@ void read_and_send_ds_data(void) {
 
   TxHeader.StdId = BOILER_TEMP_CAN_ID;
   TxHeader.DLC = 5;
+  /* set onewire reading error */
   TxData[0] = err_c;
+  
+  uint8_t protection_staus = HAL_GPIO_ReadPin(ONEWIRE_PROTECTION_Input_GPIO_Port, ONEWIRE_PROTECTION_Input_Pin);
+  printf("ds_short circuit = %d\n", protection_staus); // Print as two integers
+
+  /* set power short circuit protection */
+  if (protection_staus == 0) { /* low means protection was triggered */
+    TxData[0] = TxData[0] | 0b10000000;
+  }
+  /* copy temperature value */
   for (int i=0; i<4 ;++i) {
     TxData[i + 1] = ((uint8_t*)&ds_temperature)[i];
   }
@@ -355,8 +365,6 @@ int main(void)
     // HAL_Delay(250);
     HAL_Delay(1000);
     // HAL_Delay(2500);
-
-    // ONEWIRE_PROTECTION_Input_GPIO_Port
   }
   /* USER CODE END 3 */
 }
