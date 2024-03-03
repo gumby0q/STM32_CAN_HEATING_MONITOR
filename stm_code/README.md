@@ -36,6 +36,11 @@ sudo chmod 666 /dev/ttyACM0
 ```
 
 
+TODO:
+- cleanup logs
+- add logic for disabling first read after error
+- write logic for triac On and Off based on the temperture
+
 
 <!-- https://github.com/rromano001/STM32_SINGLE-2-ONE_Wire/blob/master/HAL_SW_FullDuplex_skeleton.c -->
 <!-- https://electronics.stackexchange.com/questions/484079/stm32-usart-1-wire-communication -->

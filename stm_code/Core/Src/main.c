@@ -162,8 +162,8 @@ void read_and_send_ds_data(void) {
   // After we got the temperatures, we can print them here.
   // We use the function ByIndex, and as an example get the temperature from the first sensor only.
   printf("Temperature for the device 1 (index 0) is: ");
-  // DT_GetTempCByIndex
-  float ds_temperature = 0;
+
+  float ds_temperature = DEVICE_DISCONNECTED_C;
   int8_t err_c = DT_GetTempCByIndex(0, &ds_temperature);
   // float ds_temperature = DT_GetTempCByIndex(0);
   // sprintf(buf, "\n ds_temperature %.4f\r\n", ds_temperature);

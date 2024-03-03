@@ -56,6 +56,13 @@ bool DT_IsConnected(const uint8_t*);
 // also allows for updating the read scratchpad
 bool DT_IsConnected_ScratchPad(const uint8_t*, uint8_t*);
 
+uint8_t DT_GetTemp_my(const uint8_t*, int16_t * temp_value);
+uint8_t DT_GetAddress_my(uint8_t*, uint8_t);
+uint8_t DT_IsConnected_ScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad);
+uint8_t DT_ReadScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad);
+
+
+
 // read device's scratchpad
 bool DT_ReadScratchPad(const uint8_t*, uint8_t*);
 

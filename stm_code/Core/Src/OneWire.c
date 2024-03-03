@@ -17,8 +17,10 @@ uint8_t ow_buf_rx[8];
 
 //#define TIMEOUT_MS (250)
 #define OW_RESET_TIMEOUT_VALUE (0x00000100U)
-#define OW_DATA_SEND_TIMEOUT_VALUE  (0x00001000U)
-#define OW_DATA_SEND_BITS_TIMEOUT_VALUE (0x00001100U)
+#define OW_DATA_SEND_TIMEOUT_VALUE  (0x00000100U)
+#define OW_DATA_SEND_BITS_TIMEOUT_VALUE (0x00000200U)
+// #define OW_DATA_SEND_TIMEOUT_VALUE  (0x00001000U)
+// #define OW_DATA_SEND_BITS_TIMEOUT_VALUE (0x00001100U)
 
 
 static void OW_toBits(uint8_t ow_byte, uint8_t *ow_bits);
@@ -206,7 +208,7 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 		}
 	}
 
-	// printf("-1-test\n");
+	printf("-1-test\n");
 
 	while (cLen > 0)
 	{
@@ -214,13 +216,15 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 		command++;
 		cLen--;
 
-		
+		printf("-3-test\n");
+
 		error = HAL_UART_Receive_DMA(&HUARTx, ow_buf_rx, sizeof(ow_buf_rx));
 		error = HAL_UART_Transmit_DMA(&HUARTx, ow_buf, sizeof(ow_buf));
 
 		// char buff[30];
 		// sprintf(buf, "%d - %d - %d \r\n", tmp_byte, tmp_byte2, tmp_byte3);
 		// printf(buf);
+		printf("-4-test\n");
 
 		uint32_t tickstart = 0U;
 		tickstart = HAL_GetTick();
@@ -232,7 +236,7 @@ uint8_t OW_Send(uint8_t sendReset, uint8_t *command, uint8_t cLen, uint8_t *data
 			}
 		}
 
-		// printf("-5-test\n");
+		printf("-5-test\n");
 
 		if (readStart == 0 && dLen > 0)
 		{
@@ -283,6 +287,7 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 
 		// sprintf(_test_str, "check 1 error_status=%d num=%d\n", error_status, num);
 		// printf(_test_str);
+		printf("\n test OW_Send error_status %d \n", error_status);
 
 		if (error_status != 0) {
 			return error_status;
@@ -293,6 +298,7 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 			OW_toBits(OW_READ_SLOT, ow_buf);
 
 			error_status = OW_SendBits(2);
+			printf("\n test OW_SendBits error_status %d \n", error_status);
 
 			if (error_status != 0) {
 				return error_status;
@@ -364,6 +370,7 @@ uint8_t OW_Search(uint8_t *buf, uint8_t num, uint8_t *found)
 			}
 
 			error_status = OW_SendBits(1);
+			printf("\n test OW_SendBits 2 error_status %d \n", error_status);
 
 			if (error_status != 0) {
 				return error_status;
