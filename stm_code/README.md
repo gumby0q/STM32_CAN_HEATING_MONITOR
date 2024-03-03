@@ -38,6 +38,7 @@ sudo chmod 666 /dev/ttyACM0
 
 TODO:
 - cleanup logs
+- add crc check on the scratchpad read!!!
 - add logic for disabling first read after error
 - write logic for triac On and Off based on the temperture
 
