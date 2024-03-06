@@ -15,7 +15,7 @@ extern "C" {
 
 struct display_screen1_data
 {
-	char str_boiler_value[10];
+	char str_boiler_value[20];
 
 	char str_tempreture_value_1[10];
 	char str_humidity_value_1[10];

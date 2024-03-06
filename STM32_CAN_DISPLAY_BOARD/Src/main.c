@@ -658,22 +658,34 @@ int main(void)
 	  	 printf("OK2!\r\n");
 //	  display_update();
 
-	  sprintf(screen1_data.str_boiler_value, "ddd1");
+       float value = input_packet_boiler_temperature;
+       int32_t value_int = (int32_t)(value * 1000) / 1000;                             // Convert to an integer with 3 decimal places preserved
+      //  int32_t value_dec = (int32_t)((value % (float)(int16_t)value) * 10);                             // Convert to an integer with 3 decimal places preserved
+      //  sprintf(screen1_data.str_boiler_value, "%3d.%1d", value_int, value_int % 1000); // Print as two integers
+      //  float integral;
+      //  float fractional = modf(value, &integral) * 10;
 
-	  sprintf(screen1_data.str_tempreture_value_1, "ddd2");
-	  sprintf(screen1_data.str_humidity_value_1, "ddd3");
+       int intpart = (int)value;
+       float decpart = value - intpart;
+       uint8_t value_dec = (uint8_t)(decpart * 10);
+       sprintf(screen1_data.str_boiler_value, "%3ld.%d", value_int, value_dec); // Print as two integers
+       // sprintf(tmp_string, "B %.2f", input_packet_boiler_temperature);
 
-	  sprintf(screen1_data.str_tempreture_value_2, "ddd4");
-	  sprintf(screen1_data.str_humidity_value_2, "ddd5");
+       // sprintf(screen1_data.str_boiler_value, "ddd1");
 
-	  sprintf(screen1_data.str_pump_status_1, "ddd6");
-	  sprintf(screen1_data.str_pump_status_2, "ddd7");
+       sprintf(screen1_data.str_tempreture_value_1, "ddd2");
+       sprintf(screen1_data.str_humidity_value_1, "ddd3");
 
-//	  sprintf(screen1_error_holder.str_error, "test error");
-//	  screen1_error_holder.error_flag = ERROR_FLAG_ON;
+       sprintf(screen1_data.str_tempreture_value_2, "ddd4");
+       sprintf(screen1_data.str_humidity_value_2, "ddd5");
 
+       sprintf(screen1_data.str_pump_status_1, "ddd6");
+       sprintf(screen1_data.str_pump_status_2, "ddd7");
 
-	  display_update2(&u8g2, &screen1_data, &screen1_error_holder);
+       //	  sprintf(screen1_error_holder.str_error, "test error");
+       //	  screen1_error_holder.error_flag = ERROR_FLAG_ON;
+
+       display_update2(&u8g2, &screen1_data, &screen1_error_holder);
   }
   /* USER CODE END 3 */
 }
@@ -732,11 +744,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN1;
-  hcan.Init.Prescaler = 5;
+  hcan.Init.Prescaler = 10;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_6TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_13TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;
@@ -977,9 +989,11 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan_)
 	}else if(RxHeader.StdId==RELAY_CONTROL_CAN_ID){
 //		Control_peripheral_relays(RxData[0]);
 	}else if(RxHeader.StdId==BOILER_TEMP_CAN_ID){
-		input_packet_boiler_temperature = u;
+		// input_packet_boiler_temperature = u;
+		// uint8_t boiler_temperature_errors = RxData[0];
+
 		for (int i=0; i<4 ;++i) {
-			((uint8_t*)&input_packet_boiler_temperature)[i] = RxData[i];
+			((uint8_t*)&input_packet_boiler_temperature)[i] = RxData[i+1];
 		}
 		input_packet_boiler_timeout = 0;
 	}
