@@ -156,25 +156,41 @@ void printAddress(CurrentDeviceAddress deviceAddress)
 void read_and_send_ds_data(void) {
   printf("Requesting temperatures...");
 
-  char buf[30];
-
+  char buf[50];
   DT_RequestTemperatures(); // Send the command to get temperatures
   printf("DONE\r\n");
   // After we got the temperatures, we can print them here.
   // We use the function ByIndex, and as an example get the temperature from the first sensor only.
   printf("Temperature for the device 1 (index 0) is: ");
-  float ds_temperature = DT_GetTempCByIndex(0);
-  sprintf(buf, "ds_temperature %.2f\r\n", ds_temperature);
+
+  float ds_temperature = DEVICE_DISCONNECTED_C;
+  int8_t err_c = DT_GetTempCByIndex(0, &ds_temperature);
+  // float ds_temperature = DT_GetTempCByIndex(0);
+  // sprintf(buf, "\n ds_temperature %.4f\r\n", ds_temperature);
+  sprintf(buf, "\n err_c %i ds_temperature %f\r\n", err_c, ds_temperature);
   printf(buf);
 
-  // TxHeader.StdId = BOILER_TEMP_CAN_ID;
-  // TxHeader.DLC = 4;
+  float value = ds_temperature;
+  int value_int = (int)(value * 1000);               // Convert to an integer with 3 decimal places preserved
+  printf("ds_temperature = %d.%d\n", value_int / 1000, value_int % 1000); // Print as two integers
 
-  // for (int i=0; i<4 ;++i) {
-  //   TxData[i] = ((uint8_t*)&ds_temperature)[i];
-  // }
+  TxHeader.StdId = BOILER_TEMP_CAN_ID;
+  TxHeader.DLC = 5;
+  /* set onewire reading error */
+  TxData[0] = err_c;
+  
+  uint8_t protection_staus = HAL_GPIO_ReadPin(ONEWIRE_PROTECTION_Input_GPIO_Port, ONEWIRE_PROTECTION_Input_Pin);
+  printf("ds_short circuit = %d\n", protection_staus); // Print as two integers
 
-  // HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+  /* set power short circuit protection */
+  if (protection_staus == 0) { /* low means protection was triggered */
+    TxData[0] = TxData[0] | 0b10000000;
+  }
+  /* copy temperature value */
+  for (int i=0; i<4 ;++i) {
+    TxData[i + 1] = ((uint8_t*)&ds_temperature)[i];
+  }
+  HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
 
   // HAL_Delay(2500);
   // /* send relays status */
@@ -222,35 +238,35 @@ int main(void)
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
-  // HAL_GPIO_WritePin(CAN_ENABLE_GPIO_Port, CAN_ENABLE_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(CAN_ENABLE_GPIO_Port, CAN_ENABLE_Pin, GPIO_PIN_RESET);
 
-  // sFilterConfig.FilterBank = 0;
-  // sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
-  // sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-  // sFilterConfig.FilterIdHigh = 0x0000;
-  // sFilterConfig.FilterIdLow = 0x0000;
-  // sFilterConfig.FilterMaskIdHigh = 0x0000;
-  // sFilterConfig.FilterMaskIdLow = 0x0000;
-  // sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-  // sFilterConfig.FilterActivation = ENABLE;
-  // sFilterConfig.SlaveStartFilterBank = 14;
-  // if (HAL_CAN_ConfigFilter(&hcan, &sFilterConfig) != HAL_OK)
-  // {
-  //   /* Filter configuration Error */
-  //   Error_Handler();
-  // }
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = 0x0000;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = 0x0000;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
+  if (HAL_CAN_ConfigFilter(&hcan, &sFilterConfig) != HAL_OK)
+  {
+    /* Filter configuration Error */
+    Error_Handler();
+  }
 
-  // if (HAL_CAN_Start(&hcan) != HAL_OK)
-  // {
-  //   /* Start Error */
-  //   Error_Handler();
-  // }
+  if (HAL_CAN_Start(&hcan) != HAL_OK)
+  {
+    /* Start Error */
+    Error_Handler();
+  }
 
-  // if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_TX_MAILBOX_EMPTY) != HAL_OK)
-  // {
-  //   /* Notification Error */
-  //   Error_Handler();
-  // }
+  if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_TX_MAILBOX_EMPTY) != HAL_OK)
+  {
+    /* Notification Error */
+    Error_Handler();
+  }
 
   // TxHeader.StdId = BOILER_TEMP_CAN_ID;
   // TxHeader.ExtId = 0x00;
@@ -281,6 +297,20 @@ int main(void)
 
   // locate devices on the bus
   char buf[30];
+
+  OW_Init();
+  OW_Reset();
+
+  if (OW_Reset() == OW_OK)
+  {
+    printf("[%8lu] OneWire 1 line devices are present :)\r\n", HAL_GetTick());
+  }
+  else
+  {
+    printf("[%8lu] OneWire 1 line no devices :(\r\n", HAL_GetTick());
+  }
+
+  DT_SetWaitForConversion(1);
 
   printf("Locating devices...\n");
   ds_error = DT_Begin();
@@ -332,7 +362,9 @@ int main(void)
     
     read_and_send_ds_data();
 
-    HAL_Delay(250);
+    // HAL_Delay(250);
+    HAL_Delay(1000);
+    // HAL_Delay(2500);
   }
   /* USER CODE END 3 */
 }
@@ -391,11 +423,11 @@ static void MX_CAN_Init(void)
 
   /* USER CODE END CAN_Init 1 */
   hcan.Instance = CAN1;
-  hcan.Init.Prescaler = 5;
+  hcan.Init.Prescaler = 10;
   hcan.Init.Mode = CAN_MODE_NORMAL;
   hcan.Init.SyncJumpWidth = CAN_SJW_1TQ;
-  hcan.Init.TimeSeg1 = CAN_BS1_6TQ;
-  hcan.Init.TimeSeg2 = CAN_BS2_1TQ;
+  hcan.Init.TimeSeg1 = CAN_BS1_13TQ;
+  hcan.Init.TimeSeg2 = CAN_BS2_2TQ;
   hcan.Init.TimeTriggeredMode = DISABLE;
   hcan.Init.AutoBusOff = DISABLE;
   hcan.Init.AutoWakeUp = DISABLE;

@@ -18,6 +18,7 @@
 // Error Codes
 #define DS_OK					0
 #define DS_NO_DS18_DEVICES 		1
+#define DS_TEMP_READ_ERROR 		2
 
 #define DEVICE_DISCONNECTED_C 	-127
 #define DEVICE_DISCONNECTED_F 	-196.6
@@ -54,6 +55,13 @@ bool DT_IsConnected(const uint8_t*);
 // attempt to determine if the device at the given address is connected to the bus
 // also allows for updating the read scratchpad
 bool DT_IsConnected_ScratchPad(const uint8_t*, uint8_t*);
+
+uint8_t DT_GetTemp_my(const uint8_t*, int16_t * temp_value);
+uint8_t DT_GetAddress_my(uint8_t*, uint8_t);
+uint8_t DT_IsConnected_ScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad);
+uint8_t DT_ReadScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad);
+
+
 
 // read device's scratchpad
 bool DT_ReadScratchPad(const uint8_t*, uint8_t*);
@@ -107,7 +115,7 @@ float DT_GetTempC(const uint8_t*);
 float DT_GetTempF(const uint8_t*);
 
 // Get temperature for device index (slow)
-float DT_GetTempCByIndex(uint8_t);
+int8_t DT_GetTempCByIndex(uint8_t deviceIndex, float * temperature);
 
 // Get temperature for device index (slow)
 float DT_GetTempFByIndex(uint8_t);
