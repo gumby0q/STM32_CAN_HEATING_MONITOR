@@ -3,7 +3,8 @@
 
 
 void display_update2(u8g2_t *p_u8g2, struct display_screen1_data *screen_data, struct display_screen1_error_message *screen_error) {
-	char tmp_string[24];
+	// char tmp_string[24];
+	char tmp_string[32];
 	u8g2_FirstPage(p_u8g2);
 
 	do {

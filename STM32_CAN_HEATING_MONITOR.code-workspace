@@ -4,7 +4,10 @@
 			"path": "."
 		},
 		{
-			"path": "stm_code"
+			"path": "STM32_CAN_DISPLAY_BOARD"
+		},
+		{
+			"path": "STM32_CAN_SWITCHER_BOARD"
 		}
 	],
 	"settings": {}

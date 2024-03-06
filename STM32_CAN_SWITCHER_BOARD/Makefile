@@ -191,7 +191,9 @@ clean:
 # st-flash
 #######################################
 st-flash:
-	st-flash --reset write build/STM32_CAN_SWITCHER_BOARD.bin 0x8000000
+	st-flash --reset write build/$(TARGET).bin 0x8000000
+
+# st-flash --reset write build/STM32_CAN_SWITCHER_BOARD.bin 0x8000000
 # st-flash --connect-under-reset --reset write build/STM32_CAN_SWITCHER_BOARD.bin 0x8000000
 # st-flash --reset write build/STM32_CAN_SWITCHER_BOARD.bin 0x8000000
 
