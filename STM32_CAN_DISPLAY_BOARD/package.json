@@ -1,0 +1,38 @@
+{
+  "name": "test",
+  "version": "0.1.0",
+  "main": "",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "test/test.git"
+  },
+  "homepage": "test/test/",
+  "bugs": {
+    "url": "https://test.ua/test/issues"
+  },
+  "keywords": [
+    "xpack"
+  ],
+  "author": {
+    "name": "test",
+    "email": "sss@gmail.com"
+  },
+  "license": "MIT",
+  "config": {},
+  "dependencies": {},
+  "devDependencies": {},
+  "xpack": {
+    "minimumXpmRequired": "0.14.0",
+    "dependencies": {},
+    "devDependencies": {
+      "@xpack-dev-tools/arm-none-eabi-gcc": "11.3.1-1.1.2",
+      "@xpack-dev-tools/openocd": "0.11.0-5.1"
+    },
+    "properties": {},
+    "actions": {},
+    "buildConfigurations": {}
+  }
+}
