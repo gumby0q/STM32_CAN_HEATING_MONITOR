@@ -16,15 +16,16 @@ extern "C" {
 struct display_screen1_data
 {
 	char str_boiler_value[20];
+	char str_boiler_error[20];
 
-	char str_tempreture_value_1[10];
-	char str_humidity_value_1[10];
+	// char str_tempreture_value_1[10];
+	// char str_humidity_value_1[10];
 
-	char str_tempreture_value_2[10];
-	char str_humidity_value_2[10];
+	// char str_tempreture_value_2[10];
+	// char str_humidity_value_2[10];
 
-	char str_pump_status_1[10];
-	char str_pump_status_2[10];
+	char str_pump_1_status[20];
+	// char str_pump_status_2[10];
 };
 
 struct display_screen1_error_message

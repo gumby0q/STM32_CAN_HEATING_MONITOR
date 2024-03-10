@@ -42,8 +42,9 @@
 #define BOILER_TEMP_CAN_ID 0x0d0
 //#define RELAY_CONTROL_CAN_ID 0x080
 #define RELAY_CONTROL_CAN_ID 0x090
-//#define RELAY_STATUS_CAN_ID 0x081
-#define RELAY_STATUS_CAN_ID 0x091
+// #define RELAY_STATUS_CAN_ID 0x081
+// #define RELAY_STATUS_CAN_ID 0x091
+#define PUMP_STATUS_CAN_ID 0x091
 
 
 /* USER CODE END PD */
@@ -60,6 +61,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_usart3_tx;
 
 /* USER CODE BEGIN PV */
 static u8g2_t u8g2;
@@ -83,16 +85,19 @@ struct display_screen1_error_message screen1_error_holder;
 int32_t temperature;
 uint32_t pressure;
 uint32_t humidity;
-float input_packet_boiler_temperature;
 
-volatile uint8_t input_packet_boiler_timeout = 0;
+volatile float input_packet_boiler_temperature = -127;
+volatile uint8_t input_packet_boiler_temperature_err = 0;
+volatile uint8_t input_packet_pump_status = 0xff;
+
+volatile uint16_t input_packet_boiler_timeout = 0;
 
 volatile uint8_t temperature1timeout = 0;
 volatile uint8_t temperature2timeout = 0;
 volatile uint8_t humidity1timeout = 0;
 volatile uint8_t humidity2timeout = 0;
 
-#define DATA_WAIT_TIMEOUT 10
+#define DATA_WAIT_TIMEOUT 3000
 
 CAN_FilterTypeDef sFilterConfig;
 CAN_TxHeaderTypeDef TxHeader;
@@ -107,6 +112,7 @@ volatile uint16_t micro_delay_counter = 0;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_CAN_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART3_UART_Init(void);
@@ -152,12 +158,6 @@ void button_debounce() {
 	}
 }
 
-int _write(int file, char *ptr, int len)
-{
- HAL_UART_Transmit(&huart3, (uint8_t *) ptr, len, HAL_MAX_DELAY);
- return len;
-}
-
 void display_update(void);
 
 /* USER CODE END PFP */
@@ -165,6 +165,46 @@ void display_update(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+
+/*
+  these below suspends warning but may be not good
+  https://stackoverflow.com/questions/73742774/gcc-arm-none-eabi-11-3-is-not-implemented-and-will-always-fail
+*/
+/* suspends warning >>>> */
+int _close(int file) { return -1; }
+void _lseek(void) {}
+void _read(void) {}
+int _fstat_r(void) { return -1; }
+int _getpid_r(void) { return -1; }
+int _isatty_r(void) { return -1; }
+int _kill_r(/* struct _reent */ void  *ptr, int pid, int sig) { return -1; }
+// int _write(int file, char *ptr, int len) {
+//   int todo;
+//   for (todo = 0; todo < len; todo++) {
+//     // outbyte (*ptr++);
+//   }
+//   return len;
+// }
+
+/* suspends warning <<<< */
+
+int _write(int file, char *ptr, int len)
+{
+  // HAL_UART_Transmit(&huart3, (uint8_t *)ptr, len, HAL_MAX_DELAY);
+  HAL_UART_Transmit_DMA(&huart3, (uint8_t *)ptr, len);
+  uint32_t tickstart = 0U;
+  tickstart = HAL_GetTick();
+
+  while (HAL_UART_GetState(&huart3) != HAL_UART_STATE_READY)
+  {
+    if ((HAL_GetTick() - tickstart) > 500)
+    {
+      // return OW_TIMEOUT;
+      return 0;
+    }
+  }
+  return len;
+}
 
 /* ******************************************************************************* */
 void user_delay_ms(uint32_t period);
@@ -483,6 +523,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_CAN_Init();
   MX_TIM1_Init();
   MX_USART3_UART_Init();
@@ -583,15 +624,12 @@ int main(void)
 
   u8g2_FirstPage(&u8g2);
   do
-	 {
-	    u8g2_SetFont(&u8g2, u8g2_font_luBS08_tf);
-//	    u8g2_font_luRS08_tf
-
-	    //	    u8g2_font_ncenB14_tr
-
-
-		u8g2_DrawStr(&u8g2, 0, 14, "Hello world ");
-	 } while (u8g2_NextPage(&u8g2));
+  {
+    u8g2_SetFont(&u8g2, u8g2_font_luBS08_tf);
+    //	    u8g2_font_luRS08_tf
+    //	    u8g2_font_ncenB14_tr
+    u8g2_DrawStr(&u8g2, 0, 14, "Hello world 1");
+  } while (u8g2_NextPage(&u8g2));
 
   HAL_GPIO_WritePin(CAN_ENABLE_GPIO_Port, CAN_ENABLE_Pin, GPIO_PIN_RESET);
 
@@ -655,9 +693,14 @@ int main(void)
 
 
 //	    HAL_GPIO_TogglePin(GPIOC, LED_Pin);
-	  	 printf("OK2!\r\n");
+	  	//  printf("OK2!\r\n");
 //	  display_update();
 
+
+		if(input_packet_boiler_timeout >= DATA_WAIT_TIMEOUT){
+       sprintf(screen1_data.str_boiler_value, "%3ld.%d", (int32_t)-127, 0); // Print as two integers
+       sprintf(screen1_data.str_boiler_error, "0x%x", 0xff); // Print as two integers
+    } else {
        float value = input_packet_boiler_temperature;
        int32_t value_int = (int32_t)(value * 1000) / 1000;                             // Convert to an integer with 3 decimal places preserved
       //  int32_t value_dec = (int32_t)((value % (float)(int16_t)value) * 10);                             // Convert to an integer with 3 decimal places preserved
@@ -669,19 +712,39 @@ int main(void)
        float decpart = value - intpart;
        uint8_t value_dec = (uint8_t)(decpart * 10);
        sprintf(screen1_data.str_boiler_value, "%3ld.%d", value_int, value_dec); // Print as two integers
+       sprintf(screen1_data.str_boiler_error, "0x%x", input_packet_boiler_temperature_err); // Print as two integers
+
+    }
        // sprintf(tmp_string, "B %.2f", input_packet_boiler_temperature);
 
        // sprintf(screen1_data.str_boiler_value, "ddd1");
 
-       sprintf(screen1_data.str_tempreture_value_1, "ddd2");
-       sprintf(screen1_data.str_humidity_value_1, "ddd3");
+      //  sprintf(screen1_data.str_tempreture_value_1, "ddd2");
+      //  sprintf(screen1_data.str_humidity_value_1, "ddd3");
 
-       sprintf(screen1_data.str_tempreture_value_2, "ddd4");
-       sprintf(screen1_data.str_humidity_value_2, "ddd5");
+      //  sprintf(screen1_data.str_tempreture_value_2, "ddd4");
+      //  sprintf(screen1_data.str_humidity_value_2, "ddd5");
 
-       sprintf(screen1_data.str_pump_status_1, "ddd6");
-       sprintf(screen1_data.str_pump_status_2, "ddd7");
+      //  sprintf(screen1_data.str_pump_status_1, "0x%x", input_packet_pump_status);
+      //  sprintf(screen1_data.str_pump_status_2, "ddd7");
 
+      if (input_packet_pump_status == 0xff)
+      {
+        sprintf(screen1_data.str_pump_1_status, " Error    0x%x", input_packet_pump_status);
+      }
+      else if (input_packet_pump_status > 0)
+      {
+        sprintf(screen1_data.str_pump_1_status, " ON       0x%x", input_packet_pump_status);
+      }
+      else
+      {
+        sprintf(screen1_data.str_pump_1_status, " OFF      0x%x", input_packet_pump_status);
+      }
+
+      // sprintf(screen1_error_holder.str_error, "0x%x", input_packet_boiler_temperature_err);
+
+      // sprintf(screen1_error_holder.str_error, "0x%x", input_packet_pump_status);
+       	  // sprintf(screen1_error_holder.str_error, "test error");
        //	  sprintf(screen1_error_holder.str_error, "test error");
        //	  screen1_error_holder.error_flag = ERROR_FLAG_ON;
 
@@ -890,6 +953,22 @@ static void MX_USART3_UART_Init(void)
 }
 
 /**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -976,27 +1055,31 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan_)
 
 
 
-	if(RxHeader.StdId==0xf0){
+	if(RxHeader.StdId == 0xf0){
 		pressure = u;
-	}else if(RxHeader.StdId==0xf0+1){
+	} else if(RxHeader.StdId == 0xf0+1){
 		temperature = u;
 		temperature1timeout = 0;
 		temperature2timeout = 0;
-	}else if(RxHeader.StdId==0xf0+2){
+	} else if(RxHeader.StdId == 0xf0+2){
 		humidity = u;
 		humidity1timeout = 0;
 		humidity2timeout = 0;
-	}else if(RxHeader.StdId==RELAY_CONTROL_CAN_ID){
+	} else if(RxHeader.StdId == RELAY_CONTROL_CAN_ID){
 //		Control_peripheral_relays(RxData[0]);
-	}else if(RxHeader.StdId==BOILER_TEMP_CAN_ID){
+	} else if(RxHeader.StdId == BOILER_TEMP_CAN_ID){
 		// input_packet_boiler_temperature = u;
 		// uint8_t boiler_temperature_errors = RxData[0];
 
+		input_packet_boiler_temperature_err = RxData[0];
 		for (int i=0; i<4 ;++i) {
 			((uint8_t*)&input_packet_boiler_temperature)[i] = RxData[i+1];
 		}
 		input_packet_boiler_timeout = 0;
-	}
+
+	} else if(RxHeader.StdId == PUMP_STATUS_CAN_ID){
+    input_packet_pump_status = RxData[0];
+  }
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -1007,7 +1090,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 //	++temperature2timeout;
 //	++humidity1timeout;
 //	++humidity2timeout;
-//	++input_packet_boiler_timeout;
+	input_packet_boiler_timeout++;
 //
 //	if(temperature1timeout>= DATA_WAIT_TIMEOUT){
 //		temperature1timeout = DATA_WAIT_TIMEOUT;
@@ -1025,16 +1108,16 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 //		humidity2timeout = DATA_WAIT_TIMEOUT;
 //	}
 //
-//	if(input_packet_boiler_timeout>= DATA_WAIT_TIMEOUT){
-//		input_packet_boiler_timeout = DATA_WAIT_TIMEOUT;
-//	}
+	if(input_packet_boiler_timeout>= DATA_WAIT_TIMEOUT){
+		input_packet_boiler_timeout = DATA_WAIT_TIMEOUT;
+	}
 
 	  button_debounce();
 
 	  test_counter++;
 	  if (test_counter >= 1000) {
 		  test_counter = 0;
-//		  HAL_GPIO_TogglePin(GPIOC, LED_Pin);
+		  // HAL_GPIO_TogglePin(GPIOC, LED_Pin);
 	  }
  } else if ( htim->Instance == TIM2 ) {
 	 if (micro_delay_counter > 0 ) {
