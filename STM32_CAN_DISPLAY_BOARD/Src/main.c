@@ -649,7 +649,11 @@ int main(void)
 	  if (global_button_status != 0) {
 		  global_button_status = 0;
 
-		  HAL_GPIO_TogglePin(GPIOC, LED_Pin);
+
+      // HAL_GPIO_TogglePin(BACKLIGHT_GPIO_Port, BACKLIGHT_Pin, GPIO_PIN_SET);
+      HAL_GPIO_TogglePin(BACKLIGHT_GPIO_Port, BACKLIGHT_Pin);
+
+		  // HAL_GPIO_TogglePin(GPIOC, LED_Pin);
 	  }
 
 //	  HAL_Delay(2000);
