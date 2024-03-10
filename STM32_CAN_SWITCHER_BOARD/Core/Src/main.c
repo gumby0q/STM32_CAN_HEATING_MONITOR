@@ -65,6 +65,8 @@ static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
+void reset_DS_sensor(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -109,12 +111,14 @@ int _write(int file, char *ptr, int len)
   return len;
 }
 
+
 //#define BOILER_TEMP_CAN_ID 0x0d0
 #define BOILER_TEMP_CAN_ID 0x0d0
 //#define RELAY_CONTROL_CAN_ID 0x080
 #define RELAY_CONTROL_CAN_ID 0x090
 //#define RELAY_STATUS_CAN_ID 0x081
-#define RELAY_STATUS_CAN_ID 0x091
+// #define RELAY_STATUS_CAN_ID 0x091
+#define PUMP_STATUS_CAN_ID 0x091
 
 
 #define DATA_WAIT_TIMEOUT 10
@@ -135,12 +139,68 @@ uint32_t humidity;
 float input_packet_boiler_temperature;
 volatile uint8_t relays_status = 0x0;
 
+
+#define TEMPERATURE_ERROR_TIMEOUT_CNT_MAX  10*1000*5  /* 100 nano 1 tick */ 
+volatile uint32_t temperature_error_timeout_cnt = 0;
+
 volatile uint8_t input_packet_boiler_timeout = 0;
+
+/* for human testing */
+// #define PUMP_TEMP_HIST_ON   (int16_t)25
+// #define PUMP_TEMP_HIST_OFF  (int16_t)22
+
+/* real */
+#define PUMP_TEMP_HIST_ON   (int16_t)55
+#define PUMP_TEMP_HIST_OFF  (int16_t)40
+
+volatile uint8_t global_pump_flag = 0; /* on-off flag */
+
+volatile uint8_t global_ds_error = 0;
 
 volatile uint8_t temperature1timeout = 0;
 volatile uint8_t temperature2timeout = 0;
 volatile uint8_t humidity1timeout = 0;
 volatile uint8_t humidity2timeout = 0;
+
+#define GLOBAL_TEMPERATURES_ARRAY_LENGTH  5 
+volatile uint8_t global_temperatures_array_cnt = 0;
+volatile int16_t global_temperatures_array[GLOBAL_TEMPERATURES_ARRAY_LENGTH] = {-127};
+
+// Function to sort the array using Bubble Sort
+void bubbleSort(int16_t *arr, uint8_t arr_l)
+{
+  uint8_t i, j;
+  for (i = 0; i < arr_l - 1; i++)
+  {
+    for (j = 0; j < arr_l - i - 1; j++)
+    {
+      if (arr[j] > arr[j + 1])
+      {
+        // Swap temp and arr[i]
+        int16_t temp = arr[j];
+        arr[j] = arr[j + 1];
+        arr[j + 1] = temp;
+      }
+    }
+  }
+}
+
+// Function to calculate mean of middle three values
+int16_t meanOfMiddleThreeOfFive(int16_t * arr/* , uint8_t arr_l */) {
+    uint8_t arr_l = 5;
+    
+    bubbleSort(arr, arr_l);  // Sort the array
+    return (arr[1] + arr[2] + arr[3]) / 3;  // Sum and divide middle three values
+}
+
+// int main() {
+//     float tempValues[5] = {34.5, 36.1, 37.2, 35.5, 33.8};
+//     float mean = meanOfMiddleThree(tempValues, 5);
+//     printf("Mean of middle three temperatures: %f\n", mean);
+//     return 0;
+// }
+
+
 
 // function to print a device address
 void printAddress(CurrentDeviceAddress deviceAddress)
@@ -174,23 +234,100 @@ void read_and_send_ds_data(void) {
   int value_int = (int)(value * 1000);               // Convert to an integer with 3 decimal places preserved
   printf("ds_temperature = %d.%d\n", value_int / 1000, value_int % 1000); // Print as two integers
 
+  /* set global_temperatures_array >>> */
+  global_temperatures_array[global_temperatures_array_cnt] = (int16_t)ds_temperature;
+  global_temperatures_array_cnt++;
+  if (global_temperatures_array_cnt >= GLOBAL_TEMPERATURES_ARRAY_LENGTH) {
+    global_temperatures_array_cnt = 0;
+  }
+  /* set global_temperatures_array calc mean temp<<< */
+
+  /* calc mean temp >>> */
+  uint8_t temp_arr_l = 5;
+  int16_t temp_arr[5] = {0};
+  for (uint8_t i = 0; i < temp_arr_l; i++)
+  {
+    temp_arr[i] = global_temperatures_array[i];
+  }
+  int16_t mean_temp = meanOfMiddleThreeOfFive(temp_arr);
+  printf("mean_temp %d\n", mean_temp);
+  // int16_t temp_arr_test[5] = {0, 10, 12, 23, 100};
+  // int16_t mean_temp_test = meanOfMiddleThreeOfFive(temp_arr_test);
+  // printf("mean_temp_test 15 == %d?\n", mean_temp_test);
+
+
+  /* calc mean temp <<< */
+
+  /* temperature_error_timeout_cnt <<< */
+  if (err_c == 0) {
+    temperature_error_timeout_cnt = 0; 
+  }
+  /* temperature_error_timeout_cnt <<< */
+
+  /* check if pump need to be ON >>> */
+  
+  uint8_t tmp_flag = global_pump_flag;
+  /* if already OFF */
+  if (tmp_flag == 0) {
+    if (mean_temp >= PUMP_TEMP_HIST_ON) {
+      tmp_flag = 1;
+    }
+  /* if already ON */
+  } else {
+    if (mean_temp <= PUMP_TEMP_HIST_OFF) {
+      tmp_flag = 0;
+    }
+  }
+
+  if (temperature_error_timeout_cnt >= TEMPERATURE_ERROR_TIMEOUT_CNT_MAX) {
+    printf("temperature_error_timeout_cnt > MAX VALUE\n");
+
+    /* force ON */
+    tmp_flag = 1; 
+  }
+
+  global_pump_flag = tmp_flag;
+
+  if (global_pump_flag > 0) {
+    /* low lvl active */
+    HAL_GPIO_WritePin(TRIAC_1_GPIO_Port, TRIAC_1_Pin, 0);
+  } else {
+    HAL_GPIO_WritePin(TRIAC_1_GPIO_Port, TRIAC_1_Pin, 1);
+  }
+
+  /* check if pump need to be ON <<< */
+
+
   TxHeader.StdId = BOILER_TEMP_CAN_ID;
   TxHeader.DLC = 5;
-  /* set onewire reading error */
-  TxData[0] = err_c;
-  
   uint8_t protection_staus = HAL_GPIO_ReadPin(ONEWIRE_PROTECTION_Input_GPIO_Port, ONEWIRE_PROTECTION_Input_Pin);
   printf("ds_short circuit = %d\n", protection_staus); // Print as two integers
 
+  /* set onewire reading error */
+  uint8_t temp_sens_error = err_c;
   /* set power short circuit protection */
   if (protection_staus == 0) { /* low means protection was triggered */
-    TxData[0] = TxData[0] | 0b10000000;
+    temp_sens_error = temp_sens_error | 0b10000000;
   }
+
+  TxData[0] = temp_sens_error;
+  
   /* copy temperature value */
   for (int i=0; i<4 ;++i) {
     TxData[i + 1] = ((uint8_t*)&ds_temperature)[i];
   }
   HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+
+
+  /* try to reset ds setting after disconnect */
+  if (global_ds_error != 0) {
+    if (temp_sens_error == 0) {
+      printf("\ntry to reset ds settings\n");
+      reset_DS_sensor();
+    }
+  }
+  global_ds_error = temp_sens_error;
+
 
   // HAL_Delay(2500);
   // /* send relays status */
@@ -200,105 +337,17 @@ void read_and_send_ds_data(void) {
   // HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
 }
 
-
-/* USER CODE END 0 */
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
+void reset_DS_sensor(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_CAN_Init();
-  MX_USART3_UART_Init();
-  MX_TIM4_Init();
-  MX_USART1_UART_Init();
-  /* USER CODE BEGIN 2 */
-
-  HAL_GPIO_WritePin(CAN_ENABLE_GPIO_Port, CAN_ENABLE_Pin, GPIO_PIN_RESET);
-
-  sFilterConfig.FilterBank = 0;
-  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
-  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
-  sFilterConfig.FilterIdHigh = 0x0000;
-  sFilterConfig.FilterIdLow = 0x0000;
-  sFilterConfig.FilterMaskIdHigh = 0x0000;
-  sFilterConfig.FilterMaskIdLow = 0x0000;
-  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-  sFilterConfig.FilterActivation = ENABLE;
-  sFilterConfig.SlaveStartFilterBank = 14;
-  if (HAL_CAN_ConfigFilter(&hcan, &sFilterConfig) != HAL_OK)
-  {
-    /* Filter configuration Error */
-    Error_Handler();
-  }
-
-  if (HAL_CAN_Start(&hcan) != HAL_OK)
-  {
-    /* Start Error */
-    Error_Handler();
-  }
-
-  if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_TX_MAILBOX_EMPTY) != HAL_OK)
-  {
-    /* Notification Error */
-    Error_Handler();
-  }
-
-  // TxHeader.StdId = BOILER_TEMP_CAN_ID;
-  // TxHeader.ExtId = 0x00;
-  // TxHeader.RTR = CAN_RTR_DATA;
-  // TxHeader.IDE = CAN_ID_STD;
-  // TxHeader.DLC = 4;
-  // TxHeader.TransmitGlobalTime = DISABLE;
-  // TxData[0] = 1;
-  // TxData[1] = 2;
-  // TxData[2] = 3;
-  // TxData[3] = 4;
-
-  uint8_t ds_error = 0;
-
-  printf("Debug UART is OK!\r\n");
-
-  // if (OW_Reset() == OW_OK)
-  // {
-  //   printf("OneWire devices are present :)\r\n");
-  // }
-  // else
-  // {
-  //   printf("OneWire no devices :(\r\n");
-  // }
+  
+  // locate devices on the bus
+  char buf[30];
 
   // arrays to hold device address
   CurrentDeviceAddress insideThermometer;
 
-  // locate devices on the bus
-  char buf[30];
+  uint8_t ds_error = 0;
 
-  OW_Init();
   OW_Reset();
 
   if (OW_Reset() == OW_OK)
@@ -345,6 +394,107 @@ int main(void)
   sprintf(buf, "%d", DT_GetResolution(insideThermometer));
   printf(buf);
   printf("\r\n");
+}
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_CAN_Init();
+  MX_USART3_UART_Init();
+  MX_TIM4_Init();
+  MX_USART1_UART_Init();
+  /* USER CODE BEGIN 2 */
+  
+  /* they are open drain and ON if low lvl */
+  HAL_GPIO_WritePin(TRIAC_1_GPIO_Port, TRIAC_1_Pin, 1);
+  HAL_GPIO_WritePin(TRIAC_2_GPIO_Port, TRIAC_2_Pin, 1);
+
+  HAL_GPIO_WritePin(CAN_ENABLE_GPIO_Port, CAN_ENABLE_Pin, GPIO_PIN_RESET);
+
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = 0x0000;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = 0x0000;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
+  if (HAL_CAN_ConfigFilter(&hcan, &sFilterConfig) != HAL_OK)
+  {
+    /* Filter configuration Error */
+    Error_Handler();
+  }
+
+  if (HAL_CAN_Start(&hcan) != HAL_OK)
+  {
+    /* Start Error */
+    Error_Handler();
+  }
+
+  if (HAL_CAN_ActivateNotification(&hcan, CAN_IT_RX_FIFO0_MSG_PENDING | CAN_IT_TX_MAILBOX_EMPTY) != HAL_OK)
+  {
+    /* Notification Error */
+    Error_Handler();
+  }
+
+  // TxHeader.StdId = BOILER_TEMP_CAN_ID;
+  // TxHeader.ExtId = 0x00;
+  // TxHeader.RTR = CAN_RTR_DATA;
+  // TxHeader.IDE = CAN_ID_STD;
+  // TxHeader.DLC = 4;
+  // TxHeader.TransmitGlobalTime = DISABLE;
+  // TxData[0] = 1;
+  // TxData[1] = 2;
+  // TxData[2] = 3;
+  // TxData[3] = 4;
+  printf("Debug UART is OK!\r\n");
+
+  // if (OW_Reset() == OW_OK)
+  // {
+  //   printf("OneWire devices are present :)\r\n");
+  // }
+  // else
+  // {
+  //   printf("OneWire no devices :(\r\n");
+  // }
+
+  /* TIMER */
+  HAL_TIM_Base_Start_IT(&htim4);
+  /* TIMER */
+
+
+  OW_Init();
+  reset_DS_sensor();
 
   /* USER CODE END 2 */
 
@@ -357,13 +507,13 @@ int main(void)
     /* USER CODE BEGIN 3 */
 
     HAL_GPIO_TogglePin(STATUS_LED_GPIO_Port, STATUS_LED_Pin);
-    HAL_GPIO_TogglePin(TRIAC_1_GPIO_Port, TRIAC_1_Pin);
-    HAL_GPIO_TogglePin(TRIAC_2_GPIO_Port, TRIAC_2_Pin);
+    // HAL_GPIO_TogglePin(TRIAC_1_GPIO_Port, TRIAC_1_Pin);
+    // HAL_GPIO_TogglePin(TRIAC_2_GPIO_Port, TRIAC_2_Pin);
     
     read_and_send_ds_data();
 
     // HAL_Delay(250);
-    HAL_Delay(1000);
+    // HAL_Delay(1000);
     // HAL_Delay(2500);
   }
   /* USER CODE END 3 */
@@ -465,9 +615,9 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 40;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 10000;
+  htim4.Init.Period = 100;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
   {
     Error_Handler();
@@ -585,6 +735,8 @@ static void MX_DMA_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -627,6 +779,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(ONEWIRE_PROTECTION_Input_GPIO_Port, &GPIO_InitStruct);
 
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+/* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */
@@ -673,8 +827,35 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan_)
 //  }
 }
 
+uint16_t pump_status_send_cnt = 0;
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+
+  if (htim->Instance == TIM4)
+  {
+    temperature_error_timeout_cnt++;
+    if (temperature_error_timeout_cnt >= TEMPERATURE_ERROR_TIMEOUT_CNT_MAX) {
+      temperature_error_timeout_cnt = TEMPERATURE_ERROR_TIMEOUT_CNT_MAX;
+
+    }
+
+    pump_status_send_cnt++;
+    if (pump_status_send_cnt >= 10*300) {
+      pump_status_send_cnt = 0;
+      
+      TxHeader.StdId = PUMP_STATUS_CAN_ID;
+      TxHeader.DLC = 1;
+      /* set pump status */
+      TxData[0] = global_pump_flag;
+
+      HAL_CAN_AddTxMessage(&hcan, &TxHeader, TxData, &TxMailbox);
+
+
+      // HAL_GPIO_TogglePin(TRIAC_2_GPIO_Port, TRIAC_2_Pin);
+    }
+  }
+
   // if (htim->Instance == TIM1)
   // {
   //   //  HAL_GPIO_TogglePin(GPIOC, LED_Pin);

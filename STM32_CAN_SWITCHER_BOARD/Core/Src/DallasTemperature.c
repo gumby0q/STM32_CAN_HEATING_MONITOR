@@ -214,10 +214,41 @@ bool DT_IsConnected_ScratchPad(const uint8_t* deviceAddress, uint8_t* scratchPad
 	return b /*&& (OW_crc8(scratchPad, 8) == scratchPad[SCRATCHPAD_CRC])*/;
 }
 
+
+// Function to compute the CRC-8 for the Dallas 18B20 data packet.
+// The data array contains the bytes to be checked, and len is the length of this data array.
+uint8_t dallas_crc8(const uint8_t *data, const uint8_t len) {
+    uint8_t crc = 0;
+    for (uint8_t i = 0; i < len; i++) {
+        uint8_t inbyte = data[i];
+        for (uint8_t j = 0; j < 8; j++) {
+            uint8_t mix = (crc ^ inbyte) & 0x01;
+            crc >>= 1;
+            if (mix) crc ^= 0x8C;
+            inbyte >>= 1;
+        }
+    }
+    return crc;
+}
+
 uint8_t DT_IsConnected_ScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad)
 {
 	int8_t err = DT_ReadScratchPad_my(deviceAddress, scratchPad);
-	// return b /*&& (OW_crc8(scratchPad, 8) == scratchPad[SCRATCHPAD_CRC])*/;
+	uint8_t crc = OW_crc8(scratchPad, 8);
+	// uint8_t crc2 = dallas_crc8(scratchPad, 8);
+	// printf("\n!!!! crc %x %x\n", crc, scratchPad[SCRATCHPAD_CRC]);
+
+	if (err == 0) {
+		if ((crc == scratchPad[SCRATCHPAD_CRC])) {
+			/* crc ok */
+			// printf("\n!!!! crc %x %x\n", crc, scratchPad[SCRATCHPAD_CRC]);
+		} else {
+			printf("\nds read crc error %x %x\n", crc, scratchPad[SCRATCHPAD_CRC]);
+			/* crc err */
+			err = DS_TEMP_READ_CRC_ERROR;
+		}
+	}
+
 	return err;
 }
 
@@ -232,7 +263,8 @@ uint8_t DT_ReadScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad)
 		return b;
 
 
-	uint8_t query[18]={0x55, 0, 0, 0, 0, 0, 0, 0, 0, READSCRATCH, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+	// uint8_t query[18]={0x55, 0, 0, 0, 0, 0, 0, 0, 0, READSCRATCH, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+	uint8_t query[19]={0x55, 0, 0, 0, 0, 0, 0, 0, 0, READSCRATCH, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 	memcpy(&query[1], deviceAddress, 8);
 
 	// Read all registers in a simple loop
@@ -249,7 +281,8 @@ uint8_t DT_ReadScratchPad_my(const uint8_t* deviceAddress, uint8_t* scratchPad)
 	//         DS18B20 & DS1822: store for crc
 	// byte 8: SCRATCHPAD_CRC
 
-	b = OW_Send(OW_SEND_RESET, query, 18, scratchPad, 8, 10);
+	// b = OW_Send(OW_SEND_RESET, query, 18, scratchPad, 8, 10);
+	b = OW_Send(OW_SEND_RESET, query, 19, scratchPad, 9, 10);
 
 	// printf("\n b OW_Send %i :", b);
 	// for (uint8_t i = 0; i < sizeof(scratchPad); i++) {
@@ -580,7 +613,7 @@ bool DT_RequestTemperaturesByIndex(uint8_t deviceIndex)
 // Fetch temperature for device index
 int8_t DT_GetTempCByIndex(uint8_t deviceIndex, float * temperature)
 {
-	printf("test 10 0\n");
+	// printf("test 10 0\n");
 	AllDeviceAddress deviceAddress;
 	
 	int8_t err = DT_GetAddress_my(deviceAddress, deviceIndex);
@@ -589,7 +622,7 @@ int8_t DT_GetTempCByIndex(uint8_t deviceIndex, float * temperature)
 		return err;
 	}
 
-	printf("test 10 1\n");
+	// printf("test 10 1\n");
 	// *temperature = DT_GetTempC((uint8_t*) deviceAddress);
 	
 	int16_t _temperature = 0;
@@ -601,7 +634,7 @@ int8_t DT_GetTempCByIndex(uint8_t deviceIndex, float * temperature)
 		return err;
 	}
 
-	printf("test 10 2\n");
+	// printf("test 10 2\n");
 
 	return DS_OK;
 }
@@ -624,7 +657,7 @@ int16_t DT_CalculateTemperature(const uint8_t* deviceAddress, uint8_t* scratchPa
 {
 	int16_t fpTemperature = (((int16_t) scratchPad[TEMP_MSB]) << 11) | (((int16_t) scratchPad[TEMP_LSB]) << 3);
 	// int16_t fpTemperature = (((int16_t) scratchPad[TEMP_MSB]) << 8) | (((int16_t) scratchPad[TEMP_LSB]));
-	int16_t fpTemperature1 = ((((int16_t) scratchPad[TEMP_MSB]) << 11) | (((int16_t) scratchPad[TEMP_LSB]) << 3)) >> 8;
+	// int16_t fpTemperature1 = ((((int16_t) scratchPad[TEMP_MSB]) << 11) | (((int16_t) scratchPad[TEMP_LSB]) << 3)) >> 8;
 
 	/*
 	 DS1820 and DS18S20 have a 9-bit temperature register.
@@ -651,14 +684,14 @@ int16_t DT_CalculateTemperature(const uint8_t* deviceAddress, uint8_t* scratchPa
 	 See - http://myarduinotoy.blogspot.co.uk/2013/02/12bit-result-from-ds18s20.html
 	 */
 
-	printf("\n DS1820 123 %i \n", fpTemperature1);
-	for (uint8_t i = 0; i < 9; i++) {
-		printf(" 0x%x", scratchPad[i]);
-	}
+	// printf("\n DS1820 123 %i \n", fpTemperature1);
+	// for (uint8_t i = 0; i < 9; i++) {
+	// 	printf(" 0x%x", scratchPad[i]);
+	// }
 
 	if (deviceAddress[0] == DS18S20MODEL)
 	{
-		printf("\nDS18S20MODEL\n");
+		// printf("\nDS18S20MODEL\n");
 		fpTemperature = ((fpTemperature & 0xfff0) << 3) - 16 + (((scratchPad[COUNT_PER_C] - scratchPad[COUNT_REMAIN]) << 7) / scratchPad[COUNT_PER_C]);
 	}
 
@@ -681,7 +714,7 @@ int16_t DT_GetTemp(const uint8_t* deviceAddress)
 
 uint8_t DT_GetTemp_my(const uint8_t* deviceAddress, int16_t * temp_value)
 {
-	ScratchPad scratchPad;
+	ScratchPad scratchPad = { 0 };
 	uint8_t err = DT_IsConnected_ScratchPad_my(deviceAddress, scratchPad);
 	
 	if (err == 0) {

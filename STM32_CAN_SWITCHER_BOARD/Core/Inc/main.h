@@ -69,6 +69,7 @@ void Error_Handler(void);
 #define ONEWIRE_USART1_TX_GPIO_Port GPIOA
 #define ONEWIRE_PROTECTION_Input_Pin GPIO_PIN_10
 #define ONEWIRE_PROTECTION_Input_GPIO_Port GPIOA
+
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

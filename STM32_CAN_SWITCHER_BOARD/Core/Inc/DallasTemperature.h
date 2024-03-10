@@ -19,6 +19,7 @@
 #define DS_OK					0
 #define DS_NO_DS18_DEVICES 		1
 #define DS_TEMP_READ_ERROR 		2
+#define DS_TEMP_READ_CRC_ERROR  3
 
 #define DEVICE_DISCONNECTED_C 	-127
 #define DEVICE_DISCONNECTED_F 	-196.6
